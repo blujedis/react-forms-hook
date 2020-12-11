@@ -15,8 +15,8 @@
     "test:watch": "jest --watch",
     "storybook": "start-storybook -p 6006",
     "storybook:export": "build-storybook",
-    "gen": "node ./tools/generate",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "do": "node ./tools"
   },
   "repository": {
     "type": "git",

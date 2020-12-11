@@ -1,13 +1,13 @@
 module.exports = (componentName) => ({
-  content: `// Generated with util/create-component.js
-import React from 'react';
+  content: `import React from 'react';
 import { render } from '@testing-library/react';
 
 import ${componentName} from './${componentName}';
-import { ${componentName}Props } from './${componentName}.types';
+import { I${componentName}Props } from './${componentName}.types';
 
 describe('Test Component', () => {
-  let props: ${componentName}Props;
+
+  let props: I${componentName}Props;
 
   beforeEach(() => {
     props = {
@@ -18,13 +18,16 @@ describe('Test Component', () => {
   const renderComponent = () => render(<${componentName} {...props} />);
 
   it('should render foo text correctly', () => {
-    props.foo = 'harvey was here';
+
+    props.foo = 'Bar was here';
     const { getByTestId } = renderComponent();
 
     const component = getByTestId('${componentName}');
 
-    expect(component).toHaveTextContent('harvey was here');
+    expect(component).toHaveTextContent('Bar was here');
+
   });
+
 });
 `,
   extension: `.test.tsx`
