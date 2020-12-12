@@ -1,0 +1,7 @@
+@import '../variables.scss';
+@import '../typography.scss';
+
+.OfficeSpace {
+  @include font-defaults;
+  color: $blue;
+}

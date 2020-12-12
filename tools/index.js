@@ -5,7 +5,7 @@ const { generate, remove, blueprints, components } = require('./init');
 const argv = process.argv.slice(2);
 const flags = argv.filter(v => v.startsWith('-'));
 const commands = argv.filter(v => !flags.includes(v));
-const component = (commands[1] || '').charAt(0).toUpperCase() + (commands[1] || '').slice(1);
+const component = commands[1];
 const blueprint = (commands[2] || 'default').toLowerCase();
 
 const hasArg = (...args) => argv.some(v => args.includes(v));
@@ -18,8 +18,8 @@ if (hasArg('-h', '--help')) {
   ${yellowBright('Consistently build React Components as Library')}
 
   ${blueBright('Commands')}:
-    generate <name> [blueprint]   Gen component w/ opt blueprint.   ${yellowBright('alias')}: gen
-    remove <name>                 Removes a component.              ${yellowBright('alias')}: rm
+    yarn do generate <name> [blueprint]   Gen component w/ opt blueprint.   ${yellowBright('alias')}: gen
+    yarn do remove <name>                 Removes a component.              ${yellowBright('alias')}: rm
 
   ${yellowBright('Flags')}:
     -f, --force       When present component will be overwritten.

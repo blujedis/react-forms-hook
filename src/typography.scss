@@ -6,6 +6,6 @@ $font-family: 'Avenir Next', Helvetica, Arial, sans-serif;
 
 @mixin heading {
   @include font-defaults;
-  font-size: 40px;
+  font-size: 2rem;
   font-weight: bold;
 }

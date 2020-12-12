@@ -59,10 +59,10 @@ module.exports = ({ component, blueprint, components, blueprints, commands, flag
       a = [...a, `import ${component} from './${component}';`, c];
     }
     else if (/^export/.test(tmp)) {
-      tmp = tmp.replace(/[^\S\r\n]+/g, '').replace(/([{};]|export)/g, '');
-      const comps = tmp.split(',');
-      comps.push(component);
-      tmp = `export { ${comps.join(', ')} };`
+      tmp = tmp.replace(/[^\S\r\n]+/g, '').replace(/([{};]|export)/g, '').trim();
+      const segments = tmp.split(',')
+      segments.push(component);
+      tmp = `export { ${segments.join(', ')} };`
       a = [...a, tmp];
     }
     else {

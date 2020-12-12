@@ -3,6 +3,6 @@
  * Generated components and their exports may not
  * work if this file is changed manually.
  */
-import TestComponent from './TestComponent';
+import OfficeSpace from './OfficeSpace';
 
-export { TestComponent };
+export { OfficeSpace };

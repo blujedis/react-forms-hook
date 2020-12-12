@@ -6,9 +6,9 @@ export default {
   title: '${componentName}'
 };
 
-export const WithBar = () => <${componentName} foo='bar' />;
+export const MiltonWaddams = () => <${componentName} label='Milton Waddams' />;
 
-export const WithBaz = () => <${componentName} foo='baz' />;
+export const PeterGibbons = () => <${componentName} label='Peter Gibbons' />;
 `,
   extension: `.stories.tsx`
 });

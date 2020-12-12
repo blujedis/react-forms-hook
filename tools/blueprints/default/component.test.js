@@ -5,26 +5,26 @@ import { render } from '@testing-library/react';
 import ${componentName} from './${componentName}';
 import { I${componentName}Props } from './${componentName}.types';
 
-describe('Test Component', () => {
+describe('${componentName}', () => {
 
   let props: I${componentName}Props;
 
   beforeEach(() => {
     props = {
-      foo: 'bar'
+      label: 'Milton Waddams'
     };
   });
 
   const renderComponent = () => render(<${componentName} {...props} />);
 
-  it('should render foo text correctly', () => {
+  it('should render Milton Waddams text correctly', () => {
 
-    props.foo = 'Bar was here';
+    props.label = 'Milton Waddams';
     const { getByTestId } = renderComponent();
 
     const component = getByTestId('${componentName}');
 
-    expect(component).toHaveTextContent('Bar was here');
+    expect(component).toHaveTextContent('Milton Waddams');
 
   });
 
