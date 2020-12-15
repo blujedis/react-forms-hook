@@ -3,3 +3,4 @@ build/
 storybook-static/
 .tmp
 temp.js
+*.log
