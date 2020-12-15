@@ -1,5 +1,5 @@
 {
-  "name": "react-component-library",
+  "name": "react-forms-hook",
   "version": "0.1.0",
   "main": "build/index.js",
   "module": "build/index.esm.js",
@@ -7,7 +7,7 @@
     "build"
   ],
   "types": "build/index.d.ts",
-  "description": "A skeleton to create your own React component library using Rollup, TypeScript, Sass and Storybook",
+  "description": "React forms validation hook",
   "scripts": {
     "build": "rollup -c",
     "watch": "rollup -c -w",
@@ -15,35 +15,29 @@
     "start": "npm run storybook",
     "test:watch": "jest --watch",
     "storybook": "start-storybook -p 6006",
-    "storybook:export": "build-storybook",
+    "docs": "build-storybook -o docs-build",
     "prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/blujedis/react-component-library.git"
+    "url": "git+https://github.com/blujedis/react-forms-hook.git"
   },
   "keywords": [
     "React",
-    "Component",
-    "Library",
-    "Rollup",
+    "Form Validation",
+    "Validation",
     "Typescript",
-    "Sass",
-    "Storybook"
+    "Forms",
+    "Hook",
+    "React Forms Hook",
+    "React Hook"
   ],
-  "author": "Harvey Delaney",
-  "contributors": [
-    {
-      "name": "Blujedis",
-      "email": "blujedicorp@gmail.com",
-      "url": "https://github.com/blujedis"
-    }
-  ],
+  "author": "Blujedis <blujedicorp@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/blujedis/react-component-library/issues"
+    "url": "https://github.com/blujedis/react-forms-hook/issues"
   },
-  "homepage": "https://github.com/blujedis/react-component-library#readme",
+  "homepage": "https://github.com/blujedis/react-forms-hook#readme",
   "peerDependencies": {
     "react": ">=16.8.0",
     "react-dom": ">=16.8.0"
