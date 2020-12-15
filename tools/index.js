@@ -10,7 +10,7 @@ const blueprint = (commands[2] || 'default').toLowerCase();
 
 const hasArg = (...args) => argv.some(v => args.includes(v));
 
-if (hasArg('-h', '--help')) {
+if (hasArg('-h', '--help') || commands.includes('help')) {
 
   const help = `
   ${blueBright('React Component Library')}
@@ -20,6 +20,7 @@ if (hasArg('-h', '--help')) {
   ${blueBright('Commands')}:
     yarn do generate <name> [blueprint]   Gen component w/ opt blueprint.   ${yellowBright('alias')}: gen
     yarn do remove <name>                 Removes a component.              ${yellowBright('alias')}: rm
+    yarn do help                          Shows help menu.
 
   ${yellowBright('Flags')}:
     -f, --force       When present component will be overwritten.
