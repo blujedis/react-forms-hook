@@ -11,11 +11,13 @@
  * - globalTypes - definition of globalTypes
  */
 
-import '@storybook/addon-console';
 
 import { addDecorator } from '@storybook/react';
 import { withConsole } from '@storybook/addon-console';
 import { setConsoleOptions } from '@storybook/addon-console';
+import '@storybook/addon-console';
+
+import './styles.css';
 
 setConsoleOptions({
   panelExclude: []

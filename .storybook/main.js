@@ -1,8 +1,10 @@
-const path = require("path");
+const { resolve, join } = require("path");
+
 
 module.exports = {
 
-  stories: ["../src/**/*.stories.tsx", "../src/**/stories.tsx"],
+  stories: ["../src/**/*.story.tsx", "../src/**/story.tsx"],
+
   // Add any Storybook addons you want here: https://storybook.js.org/addons/
   addons: [
     '@storybook/addon-essentials',
@@ -14,7 +16,7 @@ module.exports = {
     config.module.rules.push({
       test: /\.scss$/,
       use: ["style-loader", "css-loader", "sass-loader"],
-      include: path.resolve(__dirname, "../")
+      include: resolve(__dirname, "../")
     });
 
     config.module.rules.push({

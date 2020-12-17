@@ -7,6 +7,34 @@
 import get from 'lodash.get';
 import { FieldHandler, FieldValue } from './types';
 
+export const handleVirtual: FieldHandler = (field, initialData, updateTouchDirtyState) => {
+
+  const hasElementDefault = typeof field.defaultValue !== 'undefined' && field.defaultValue !== '';
+
+  const getDefaultValue = () => {
+    const modelValue = get(initialData, field.name);
+    if (typeof modelValue !== 'undefined')
+      return modelValue;
+    return field.defaultValue;
+  };
+
+  const getValue = () => field.value;
+  const setValue = (value: FieldValue, isInit = false) => {
+    field.value = value;
+    // virtuals don't have listeners so update state.
+    // if not init then we need to render after update.
+    updateTouchDirtyState(field, !isInit);
+  };
+
+  return {
+    hasElementDefault,
+    getDefaultValue,
+    getValue,
+    setValue
+  };
+
+};
+
 export const handleInput: FieldHandler = (field, initialData) => {
 
   const hasElementDefault = typeof field.defaultValue !== 'undefined' && field.defaultValue !== '';
@@ -107,7 +135,8 @@ export const handleFile: FieldHandler = (field, initialData) => {
   const getValue = () => field.files;
 
   const setValue = (value: FieldValue) => {
-    field.value = value;
+    // File can ONLY be set to empty string.
+    field.value = '';
   };
 
   return {

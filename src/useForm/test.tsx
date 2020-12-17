@@ -2,21 +2,21 @@ import React from 'react';
 import { render } from '@testing-library/react';
 
 import useForm from './form';
-import { IUseFormOptions } from './types';
+import { IOptions } from './types';
 
 describe('useForm', () => {
 
-  let props: IUseFormOptions;
+  let props: IOptions;
 
   beforeEach(() => {
-    props = { 
+    props = {
       form: null
-     };
+    };
   });
 
   const renderComponent = () => {
 
-    const {} = useForm({...props});
+    const { handleSubmit } = useForm({ ...props });
 
     render(
       <p></p>

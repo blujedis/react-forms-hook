@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isForm, isInvalidRadioList, isPromise, isRadioList, onDomRemoveField } from './utils';
-import { Field, FieldHandlers, FieldRefs, FieldValue, IFieldConfig, IUseField, IUseFormOptions, SubmitHandler, FieldErrors, ValidateHandlerPromise, ResetHandler } from './types';
-import { handleCheckbox, handleFile, handleInput, handleRadio, handleSelectMultiple, handleSelectOne } from './handlers';
+import { isDetached, isForm, isInvalidRadioList, isPromise, isRadioList, onDomRemoveField } from './utils';
+import { Field, FieldHandlers, FieldRefs, FieldValue, IFieldConfig, IUseField, IOptions, SubmitHandler, FieldErrors, ValidateHandlerPromise, ResetHandler } from './types';
+import { handleCheckbox, handleFile, handleInput, handleRadio, handleSelectMultiple, handleSelectOne, handleVirtual } from './handlers';
 import { dequal } from 'dequal';
 import { FormEvent } from 'react';
-
 
 // Default elements that should fire on "input" instead of "change".
 const INPUT_CHANGE_TYPES = [
@@ -13,35 +12,42 @@ const INPUT_CHANGE_TYPES = [
 ];
 
 const defaultHandlers = {
-  'text': handleInput,
-  'radio': handleRadio,
-  'file': handleFile,
+  text: handleInput,
+  radio: handleRadio,
+  file: handleFile,
   'select-one': handleSelectOne,
   'select-multiple': handleSelectMultiple,
-  'checkbox': handleCheckbox
+  checkbox: handleCheckbox,
+  virtual: handleVirtual
 };
 
-function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
+function useForm<T = Record<string, any>, E = Record<keyof T, string[]>>(props: IOptions<T>) {
 
   props = {
     form: 'form',
     initialData: {} as T,
+    fieldStrategy: 'extend',
     fields: [] as Extract<keyof T, string>[],
     preventInputEnter: true,
     ...props
   };
 
-  const { form, fields, initialData, preventInputEnter, onRegisterHandlers, onValidateForm } = props;
+  const {
+    form, fields, initialData, preventInputEnter, onRegisterHandlers,
+    onValidateForm, renderPersist, fieldStrategy, onTransformValue,
+    onInitValidate
+  } = props;
 
   // Resettable refs.
   const formRef = useRef<HTMLFormElement>(null);
   const fieldRefs = useRef<FieldRefs<T>>({} as any);
   const touchedRefs = useRef<Extract<keyof T, string>[]>([]);
   const dirtyRefs = useRef<Extract<keyof T, string>[]>([]);
-  const errorRefs = useRef<FieldErrors<T, E>>(null);
+  const errorRefs = useRef<FieldErrors<T, E>>({} as any);
   const submitCountRef = useRef(0);
   const submittingRef = useRef(false);
   const submittedRef = useRef(false);
+  const isValidRef = useRef(true);
 
   // We do not reset these refs.
   // they are bound to outside data
@@ -52,90 +58,28 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
 
   // Watches to see if defaults should be reinit.
   const shouldReinitDefaults = dequal(initialData, initialDataRef.current);
+  const canInitForm = formRef.current instanceof HTMLFormElement;
 
   const [, renderer] = useState(null);
-
-  useEffect(() => {
-    if (typeof form !== 'undefined' && form !== null) {
-      if (typeof form === 'string')
-        formRef.current = document.querySelector(form);
-      else if (typeof form === 'object' && form.current)
-        formRef.current = form.current;
-      else if (isForm(form))
-        formRef.current = form as HTMLFormElement;
-      else
-        throw new Error(`Form element type of ${typeof form} is NOT supported.`);
-    }
-    return () => {
-      formRef.current = null;
-    }
-  }, [form]);
-
-  useEffect(() => {
-
-    if (isForm(formRef.current)) {
-
-      formRef.current.setAttribute('novalidate', '');
-
-      resetRefs();
-
-      initialDataRef.current = initialData;
-      defaultsRef.current = initialData;
-
-      const elements = formRef.current.elements;
-      const configs = normalizeConfigs(fields);
-      const hasConfigs = !!fields.length;
-
-      for (const k in elements) {
-
-        const config = hasConfig(k, configs);
-
-        if (/^\d+$/.test(k) || typeof elements[k] === 'function' || k === 'length' || (hasConfigs && !config)) continue;
-
-        if (isInvalidRadioList(elements[k] as any)) {
-          console.warn(`Skipping invalid NodeList for ${k}, ensure type is "radio" or remove duplicate names.`);
-          continue;
-        }
-
-        const field = elements[k] as Field<T>;
-        field.config = config;
-        fieldRefs.current[k] = field;
-
-        initField(field);
-
-      }
-
-      // Register Mutation observer.
-      onDomRemoveField(fieldRefs);
-
-    }
-
-    return () => {
-      const fields = Object.values(fieldRefs.current) as Field<T>[] || [];
-      fields.forEach(field => field.unregister());
-      resetRefs(true);
-    }
-
-  }, [formRef.current]);
-
-  useEffect(() => {
-    if (typeof defaultsRef.current !== 'undefined') {
-      const fields = Object.values(fieldRefs.current) as Field<T>[];
-      for (const field of fields) {
-        if (field.handler) {
-          const defaultValue = field.handler.getDefaultValue();
-          defaultsRef.current[field.name as any] = defaultValue;
-          if (typeof defaultValue !== 'undefined' && defaultValue !== '')
-            field.handler.setValue(defaultValue);
-        }
-      }
-    }
-  }, [shouldReinitDefaults]);
-
 
   //////////////////////////////////////
   // Private Methods
   //////////////////////////////////////
+
+  const render = useCallback(function render(persistValues = renderPersist) {
+    const values = getValue();
+    renderer({});
+    if (persistValues) {
+      const fields = Object.values(fieldRefs.current) as Field<T>[];
+      fields.forEach(field => {
+        const currentValue = values[field.name];
+        if (typeof currentValue !== 'undefined') {
+          field.handler.setValue(currentValue as any);
+        }
+      });
+    }
+  }, [getValue, renderPersist]);
+
 
   function registerHandlers() {
     let handlers = { ...defaultHandlers };
@@ -150,80 +94,116 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
       fieldRefs.current = {} as any;
     touchedRefs.current = [];
     dirtyRefs.current = [];
-    errorRefs.current = null;
+    errorRefs.current = {} as any;
     submitCountRef.current = 0;
     submittingRef.current = false;
     submittedRef.current = false;
+    isValidRef.current = true;
   }
 
-  function fieldToName(fieldOrName: Extract<keyof T, string> | Field<T>) {
+  const extendField = useCallback((field: Field<T>, config = {} as any) => {
+    config.name = field.name;
+    for (const k in config) {
+      if (!Object.hasOwnProperty.call(config, k) || k === 'type') continue;
+      field[k] = config[k];
+    }
+    return field;
+  }, []);
+
+  const fieldToName = useCallback((fieldOrName: Extract<keyof T, string> | Field<T>) => {
     let name = fieldOrName as Extract<keyof T, string>;
     if (typeof fieldOrName !== 'string')
       name = fieldOrName.name as Extract<keyof T, string>;
     return name;
-  }
+  }, []);
 
-  function isTouched(fieldOrName: Extract<keyof T, string> | Field<T>) {
+  const isTouched = useCallback((fieldOrName: Extract<keyof T, string> | Field<T>) => {
     return touchedRefs.current.includes(fieldToName(fieldOrName));
-  }
+  }, [fieldToName]);
 
-  function isDirty(fieldOrName: Extract<keyof T, string> | Field<T>) {
+  const isDirty = useCallback((fieldOrName: Extract<keyof T, string> | Field<T>) => {
     return dirtyRefs.current.includes(fieldToName(fieldOrName));
-  }
+  }, [fieldToName]);
 
-  function isDirtyCompared(fieldOrName: Extract<keyof T, string> | Field<T>, value: any) {
+  const isDirtyCompared = useCallback((fieldOrName: Extract<keyof T, string> | Field<T>, value: any) => {
     const defs = defaultsRef.current || {} as any;
     const name = fieldToName(fieldOrName);
     return !dequal(defs[name], value);
-  }
+  }, [fieldToName]);
 
-  function setTouched(fieldOrName: Extract<keyof T, string> | Field<T>) {
+  const setTouched = useCallback((fieldOrName: Extract<keyof T, string> | Field<T>) => {
     const name = fieldToName(fieldOrName);
     const clone = [...touchedRefs.current];
     if (!touchedRefs.current.includes(name))
       touchedRefs.current = [...clone, name];
-  }
+  }, [fieldToName]);
 
-  function setDirty(fieldOrName: Extract<keyof T, string> | Field<T>) {
+  const setDirty = useCallback((fieldOrName: Extract<keyof T, string> | Field<T>) => {
     const name = fieldToName(fieldOrName);
     const clone = [...dirtyRefs.current];
     if (!dirtyRefs.current.includes(name))
       dirtyRefs.current = [...clone, name];
-  }
+  }, [fieldToName]);
 
-  function removeDirty(fieldOrName: Extract<keyof T, string> | Field<T>) {
+  const removeDirty = useCallback((fieldOrName: Extract<keyof T, string> | Field<T>) => {
     const name = fieldToName(fieldOrName);
     dirtyRefs.current = dirtyRefs.current.filter(v => v !== name);
-  }
+  }, [fieldToName]);
 
-  function removeFieldRef(key: keyof T) {
+  const removeFieldRef = useCallback((key: keyof T) => {
     delete fieldRefs.current[key];
-  }
+  }, []);
 
-  function normalizeConfigs(ctrls: (Extract<keyof T, string> | IFieldConfig<T>)[] = []) {
-    return (ctrls || []).map(v => {
+  const normalizeConfigs = useCallback((fields: (Extract<keyof T, string> | IFieldConfig<T>)[] = []) => {
+    return (fields || []).map(v => {
       if (typeof v !== 'object')
         return { name: v };
       return v;
     }) as IFieldConfig<T>[];
-  }
+  }, []);
 
-  function hasConfig(key: string, configs: IFieldConfig<T>[]) {
+  const getVirtuals = useCallback((fieldConfigs: IFieldConfig<T>[], boundFields: FieldRefs<T>) => {
+
+    const boundFieldKeys = Object.keys(boundFields || {});
+
+    const fieldConfigKeys = fieldConfigs.map(c => {
+      if (typeof c === 'object')
+        return c.name as string;
+      return c as string;
+    });
+
+    const keys = fieldConfigKeys.filter(k => !boundFieldKeys.includes(k));
+
+    const configs = keys.reduce((a, c) => {
+      const found = fieldConfigs.find(n => n.name === c as any);
+      if (found)
+        a[c] = found;
+      return a;
+    }, {} as FieldRefs<T>);
+
+    return {
+      keys,
+      configs
+    };
+
+  }, []);
+
+  const hasConfig = useCallback((key: string, configs: IFieldConfig<T>[]) => {
     return configs.find(v => v.name === key);
-  }
+  }, []);
 
-  async function validateForm(): Promise<FieldErrors<T>> {
+  const validateForm = useCallback(async (shouldRender = false): Promise<FieldErrors<T>> => {
 
     if (!onValidateForm)
       return Promise.resolve(null);
 
-    const values = getValue();
+    const values = getValueWithTransform();
     const fields = fieldRefs.current;
 
     let validator = onValidateForm as ValidateHandlerPromise<T>;
 
     if (!isPromise(onValidateForm))
-      validator = ((v, f) => Promise.resolve(onValidateForm(v, f) as any));
+      validator = ((v, f, m) => Promise.resolve(onValidateForm(v, f, m) as any));
 
     // Don't really care about errors here other than to log
     // let user know. If a value is returned there are errors
@@ -231,9 +211,17 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
     // can be whatever the user wants for displaying each error for
     // each property key in the form.
     try {
-      const result = await validator(values, fields);
-      if (typeof result == 'object' && !Array.isArray(result) && result !== null)
+      const result = await validator(values, fields, formRef.current);
+      if (typeof result == 'object' && !Array.isArray(result) && result !== null) {
         errorRefs.current = result;
+        isValidRef.current = false;
+      }
+      else {
+        isValidRef.current = true;
+      }
+      if (shouldRender)
+        render();
+
       return result;
     }
     catch (ex) {
@@ -241,9 +229,9 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
       return null;
     }
 
-  }
+  }, [getValueWithTransform, onValidateForm, render]);
 
-  function updateTouchDirtyState(field: Field<T>, shouldRender = false) {
+  const updateTouchDirtyState = useCallback((field: Field<T>, shouldRender = false) => {
 
     const name = field.name;
 
@@ -269,25 +257,26 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
     if (shouldRender)
       render();
 
-  }
+  }, [isDirty, isTouched, removeDirty, render, setDirty, setTouched, isDirtyCompared]);
 
-  function bindEvents(field: Field<T>) {
+  const bindEvents = useCallback((field: Field<T>) => {
 
     const events = [];
 
-    // if (typeof clone.validateOnBlur === 'undefined' && typeof clone.validateOnChange === 'undefined')
-    // clone.validateOnBlur = true;
+    let validateOnBlur;
+    let validateOnChange;
 
-    let isValidateBlur;
-    let isValidateChange;
+    // Shouldn't bind events to virtuals.
+    if (field.type === 'virtual')
+      return events;
 
     if (['checkbox', 'radio'].includes(field.type)) {
-      isValidateBlur = false;
-      isValidateChange = true;
+      validateOnBlur = typeof field.validateOnBlur === 'undefined' ? false : field.validateOnBlur;
+      validateOnChange = typeof field.validateOnChange === 'undefined' ? true : field.validateOnChange;
     }
     else {
-      isValidateChange = false;
-      isValidateBlur = true;
+      validateOnBlur = typeof field.validateOnBlur === 'undefined' ? true : field.validateOnBlur;
+      validateOnChange = typeof field.validateOnChange === 'undefined' ? false : field.validateOnChange;
     }
 
     const handleEnter = (e: Event) => {
@@ -321,13 +310,13 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
     }
 
     // Attach blur
-    if (isValidateBlur) {
+    if (validateOnBlur) {
       field.addEventListener('blur', handleBlur);
       events.push(['blur', handleBlur]);
     }
 
     // Attach change.
-    if (isValidateChange) {
+    if (validateOnChange) {
       const event = INPUT_CHANGE_TYPES.includes(field.type) ? 'input' : 'change';
       field.addEventListener(event, handleChange);
       events.push([event, handleChange]);
@@ -346,14 +335,15 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
 
     return events;
 
-  }
+  }, [preventInputEnter, updateTouchDirtyState, validateForm]);
 
-  function unregister(field: Field<T>) {
-    field.unbind();
+  const unregister = useCallback((field: Field<T>) => {
+    if (field.unbind)
+      field.unbind();
     removeFieldRef(field.name);
-  }
+  }, [removeFieldRef]);
 
-  function normalizeField(field: Field<T>) {
+  const normalizeField = useCallback((field: Field<T>) => {
 
     // Everything is JS is any object so event though this is an 
     // array we can attach props as we primarily need them
@@ -365,7 +355,7 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
 
       field.name = item.name;
       (field as any).tagName = item.tagName;
-      field.type = item.type;
+      (field as any).type = item.type;
       const initHandler = handlerRefs.current[field.type];
 
       if (!initHandler) {
@@ -373,7 +363,7 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
         return field;
       }
 
-      field.handler = initHandler(field, initialDataRef.current);
+      field.handler = initHandler(field, initialDataRef.current, updateTouchDirtyState);
 
       return field;
 
@@ -387,16 +377,15 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
         return field;
       }
 
-      field.handler = initHandler(field, initialDataRef.current);
-
+      field.handler = initHandler(field, initialDataRef.current, updateTouchDirtyState);
 
       return field;
 
     }
 
-  }
+  }, [updateTouchDirtyState]);
 
-  function initField(field: Field<T>) {
+  const initField = useCallback((field: Field<T>) => {
 
     // Configure the element.
     field = normalizeField(field);
@@ -421,19 +410,27 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
 
     field.unregister = () => unregister(field);
 
-  }
+  }, [bindEvents, normalizeField, unregister]);
 
-  function getValueOrValues(key?: keyof T) {
+  function getValueOrValues(key?: keyof T | boolean, transform = false) {
+
+    if (typeof key === 'boolean') {
+      transform = key;
+      key = undefined;
+    }
 
     const getValueByHandler = (k: keyof T) => {
       const field = fieldRefs.current[k];
       if (!field.handler)
         return '';
-      return field.handler.getValue();
+      const currentValue = field.handler.getValue();
+      if (!transform || !onTransformValue)
+        return currentValue;
+      return onTransformValue(currentValue, field);
     };
 
     if (typeof key !== 'undefined')
-      return getValueByHandler(key);
+      return getValueByHandler(key as keyof T);
 
     return Object.keys(fieldRefs.current).reduce((a, c) => {
       a[c] = getValueByHandler(c as keyof T);
@@ -470,14 +467,17 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
   // Public Methods
   //////////////////////////////////////
 
-  function render() {
-    renderer({});
-  }
 
   function getValue(key: keyof T): FieldValue;
   function getValue(): T;
   function getValue(key?: keyof T) {
     return getValueOrValues(key);
+  }
+
+  function getValueWithTransform(key: keyof T): FieldValue;
+  function getValueWithTransform(): T;
+  function getValueWithTransform(key?: keyof T) {
+    return getValueOrValues(key, true);
   }
 
   function setValue(key: keyof T, value: any)
@@ -486,27 +486,31 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
     setValueOrValues(key, value);
   }
 
-  function getError(key?: keyof T): any[];
+  function getError(key: keyof T): any[];
   function getError(): FieldErrors<T, E>;
   function getError(key?: keyof T) {
     return getErrorOrErrors(key);
   }
 
   function setError(errors?: FieldErrors<T, E>) {
-    errorRefs.current = errors || null;
+    errorRefs.current = errors || {} as any;
   }
 
-  function reset(values?: T) {
+  function reset(values: T, shouldRender?: boolean): T;
+  function reset(shouldRender?: boolean): T;
+  function reset(values?: T | boolean, shouldRender = true) {
+    if (typeof values === 'boolean') {
+      shouldRender = values;
+      values = undefined;
+    }
     resetRefs();
     formRef.current.reset();
-    let newValues = values;
-    if (values)
-      setValue(values);
-    newValues = getValue();
-    render();
-    return newValues;
+    values = values || { ...defaultsRef.current };
+    setValue(values as T);
+    if (shouldRender)
+      render();
+    return values;
   }
-
 
   function handleReset(fn: ResetHandler<T>)
   function handleReset(event: FormEvent)
@@ -519,9 +523,20 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
         e.persist();
       }
 
-      const defaultValues = reset();
+      // No need to render twice so if we're going to render with
+      // validation we can skip it on reset.
 
-      (fnOrEvent as ResetHandler<T>)(defaultValues, e);
+      const skipRender = !onInitValidate;
+      const resetValues = reset(skipRender);
+
+      // In order to ensure same state as when loaded
+      // and if user requested validate on init
+      // we need to revalidate the form.
+      // render here as we skipped above.
+      if (onInitValidate)
+        await validateForm(true);
+
+      (fnOrEvent as ResetHandler<T>)(resetValues, e);
 
     };
 
@@ -542,7 +557,7 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
 
     const handleCallback = async (e) => {
 
-      const model = getValue();
+      const values = getValueWithTransform();
       const errors = await validateForm();
 
       submittingRef.current = false;
@@ -550,7 +565,7 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
 
       render();
 
-      fn(model, errors, e);
+      fn(values, errors, e);
 
     };
 
@@ -570,18 +585,17 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
 
   }
 
-  function useField<K extends keyof T>(name: Extract<K, string>) {
+  const initUseField = useCallback(<K extends keyof T>(name: Extract<K, string>) => {
 
     const getElement = () => {
       return fieldRefs.current[name as keyof T] || null;
-    };
-
-    const safeGetElement = () => {
-      return getElement() || { value: null };
     }
 
     const getValue = () => {
-      return safeGetElement().value;
+      const elem = getElement();
+      if (elem)
+        return elem.value;
+      return null;
     }
 
     const setValue = (value = '') => {
@@ -612,6 +626,12 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
         const errors = getError(name) || [];
         return !errors.length;
       },
+      get validity() {
+        const elem = getElement();
+        if (!elem)
+          return null;
+        return elem.validity;
+      },
       blur() {
         const elem = getElement();
         if (elem)
@@ -626,38 +646,151 @@ function useForm<E = any, T = Record<string, any>>(props: IUseFormOptions<T>) {
       resetValue
     };
 
-  }
+  }, [getError, isTouched, isDirty]);
 
-  function useFields<K extends keyof T>(...names: K[]) {
+  const initUseFields = useCallback(<K extends keyof T>(...names: Extract<K, string>[]) => {
     return names.reduce((a, c) => {
-      a[c] = useField(c);
+      a[c] = initUseField(c);
       return a;
     }, {} as any) as Record<K, IUseField<T>>;
-  }
+  }, [initUseField]);
+
+  /////////////////////////////////////////////
+  // Define Side Effects
+  /////////////////////////////////////////////
+
+  useEffect(() => {
+    if (typeof form !== 'undefined' && form !== null) {
+      if (typeof form === 'string')
+        formRef.current = document.querySelector(form);
+      else if (typeof form === 'object' && form.current)
+        formRef.current = form.current;
+      else if (isForm(form))
+        formRef.current = form as HTMLFormElement;
+      else
+        throw new Error(`Form element type of ${typeof form} is NOT supported.`);
+    }
+    return () => {
+      formRef.current = null;
+    }
+  }, [form]);
+
+  useEffect(() => {
+
+    if (isForm(formRef.current)) {
+
+      formRef.current.setAttribute('novalidate', '');
+
+      resetRefs();
+
+      initialDataRef.current = initialData;
+      defaultsRef.current = initialData;
+
+      const elements = formRef.current.elements;
+      const fieldConfigs = normalizeConfigs(fields);
+      const hasConfigs = !!fields.length;
+
+      for (const k in elements) {
+
+        const config = hasConfig(k, fieldConfigs);
+
+        if (/^\d+$/.test(k) || typeof elements[k] === 'function' || k === 'length' || (hasConfigs && fieldStrategy === 'strict' && !config)) continue;
+
+        if (isInvalidRadioList(elements[k] as any)) {
+          console.warn(`Skipping invalid NodeList for ${k}, ensure type is "radio" or remove duplicate names.`);
+          continue;
+        }
+
+        const field = extendField(elements[k] as Field<T>, config);
+
+        fieldRefs.current[k] = field;
+
+        initField(field);
+
+      }
+
+      // Check for virtuals that aren't yet bound.
+      if (fieldConfigs.length) {
+        const { keys, configs } = getVirtuals(fieldConfigs, fieldRefs.current);
+        keys.forEach(k => {
+          const config = configs[k];
+          if (!config) // basically this shouldn't ever happen.
+            throw new Error(`Failed to bind virtual ${k} using config of undefined.`);
+          const field = {
+            ...config,
+            type: 'virtual'
+          };
+          fieldRefs.current[k] = field;
+          initField(field as any);
+        });
+      }
+
+      // Register Mutation observer.
+      onDomRemoveField(fieldRefs);
+
+      if (!formRef.current.onreset)
+        formRef.current.onReset = handleReset;
+
+    }
+
+    return () => {
+      const fields = Object.values(fieldRefs.current) as Field<T>[] || [];
+      fields.forEach(field => {
+        field.unregister();
+      });
+      resetRefs(true);
+    }
+
+  }, [canInitForm, extendField, fieldStrategy, fields, handleReset,
+    getVirtuals, hasConfig, initField, initialData, normalizeConfigs]);
+
+  useEffect(() => {
+    if (typeof defaultsRef.current !== 'undefined') {
+      const fields = Object.values(fieldRefs.current) as Field<T>[];
+      for (const field of fields) {
+        if (field.handler) {
+          const defaultValue = field.handler.getDefaultValue();
+          defaultsRef.current[field.name as any] = defaultValue;
+          if (typeof defaultValue !== 'undefined' && defaultValue !== '')
+            field.handler.setValue(defaultValue, true);
+        }
+      }
+    }
+    if (onInitValidate)
+      validateForm(true); // after render here to update if validate on init.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldReinitDefaults, onInitValidate]);
+
+  /////////////////////////////////////////////
+  // Return State & Api
+  /////////////////////////////////////////////
 
   const state = useMemo(() => {
     return {
       get touched() { return touchedRefs.current },
       get dirty() { return dirtyRefs.current },
-      get values() { return getValue(); },
+      get values() { return getValueWithTransform(); },
       get submitCount() { return submitCountRef.current; },
       get submitting() { return submittingRef.current; },
       get submitted() { return submittedRef.current; },
       get isDirty() { return dirtyRefs.current.length; },
-      get isTouched() { return touchedRefs.current.length; }
+      get isTouched() { return touchedRefs.current.length; },
+      get isValid() { return isValidRef.current; },
+      get errors() { return errorRefs.current; }
     };
-  }, [formRef.current, defaultsRef.current]);
+  }, [getValueWithTransform]);
 
   return {
     state,
     form: formRef.current,
     fields: fieldRefs.current,
-    handleReset: useCallback(handleReset, []),
-    handleSubmit: useCallback(handleSubmit, []),
-    useField: useCallback(useField, []),
-    useFields: useCallback(useFields, []),
-    getValue: useCallback(getValue, []),
-    setValue: useCallback(setValue, []),
+    handleReset: useCallback(handleReset, [handleReset]),
+    handleSubmit: useCallback(handleSubmit, [getValueWithTransform, render, validateForm]),
+    getValue: useCallback(getValueWithTransform, [getValueWithTransform]),
+    setValue: useCallback(setValue, [setValue]),
+    useField: initUseField,
+    useFields: initUseFields,
+    validate: validateForm
   };
 
 }

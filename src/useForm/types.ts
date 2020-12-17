@@ -8,31 +8,43 @@ export type FieldValue = string | number | boolean;
 export interface IFieldHandler {
   hasElementDefault: boolean;
   getDefaultValue: () => FieldValue | FieldValue[];
-  getValue: () => FieldValue | FieldValue[] | FileList[];
-  setValue: (value: FieldValue | FieldValue[]) => void;
+  getValue: () => FieldValue | FieldValue[] | FileList;
+  setValue: (value: FieldValue | FieldValue[], isInit?: boolean) => void;
 }
 
-export type FieldHandler = <T>(field: Field<T>, initialData: T) => IFieldHandler;
+export type FieldHandler = <T>(field: Field<T>, initialData: T, updateTouchDirtyState?: (field: Field<T>, shouldRender?: boolean) => void) => IFieldHandler;
 
 export type FieldHandlers = Record<string, FieldHandler>;
 
-export type ValidateHandlerResponse<T> = null | undefined | false | FieldErrors<T>;
+export type ValidateHandlerResponse<T> = null | undefined | FieldErrors<T>;
 
-export type ValidateHandler<T> = (values: T, fields: FieldRefs<T>) => ValidateHandlerResponse<T> | Promise<ValidateHandlerResponse<T>>;
+export type ValidateHandler<T> = (values: T, fields?: FieldRefs<T>, form?: HTMLFormElement) => ValidateHandlerResponse<T> | Promise<ValidateHandlerResponse<T>>;
 
-export type ValidateHandlerPromise<T> = (values: T, fields: FieldRefs<T>) => Promise<FieldErrors<T>>;
+export type ValidateHandlerPromise<T> = (values: T, fields?: FieldRefs<T>, form?: HTMLFormElement) => Promise<FieldErrors<T>>;
 
-export interface IUseFormOptions<T> {
+export interface IOptions<T = any> {
   form?: string | HTMLFormElement | MutableRefObject<HTMLFormElement>;
   initialData?: T;
+  fieldStrategy?: 'extend' | 'strict'; // default extend any found strict limits to only those fields.
   fields?: (Extract<keyof T, string> | IFieldConfig<T>)[];
   preventInputEnter?: boolean;
+  renderPersist?: boolean; // some ui libs require this such as antd or you lose value.
+  onInitValidate?: boolean; // validate on initialization.
   onValidateForm?: ValidateHandler<T>;
   onRegisterHandlers?: () => Record<string, FieldHandler>;
+  /**
+   * Allows model values to be transformed before output to 
+   * form validation, onSubmit or when getting values from API. 
+   * Forms utilize strings as such this allows for shaping model as needed.
+   */
+  onTransformValue?: (value: FieldValue | FieldValue[] | FileList, field: Field<T>) => any;
 }
 
 export interface IFieldConfig<T> {
-  name: keyof T;
+  name: Extract<keyof T, string>;
+  type?: string; // only for virtuals or custom handlers.
+  defaultValue?: FieldValue | FieldValue[] | FileList;
+  defaultChecked?: boolean;
   validateOnBlur?: boolean;
   validateOnChange?: boolean;
 }
@@ -41,22 +53,49 @@ export type FieldConfig<T> = Record<keyof T, IFieldConfig<T>>;
 
 export type FieldRefs<T> = Record<keyof T, Field<T>>;
 
-export interface IField<T> {
+export interface IField<T> extends IFieldConfig<T> {
+
+  /////////////////////////////////////////////////////
+  // Common
+  /////////////////////////////////////////////////////
+
   name: Extract<keyof T, string>;
-  type: string;
-  tagName: string;
+  readonly type: string;
+  readonly tagName: string;
+  handler?: IFieldHandler;
+  unregister?: () => void;
+  unbind?: () => void;
+
+  //////////////////////////////////////////////////////
+  // Value & Defaults
+  //////////////////////////////////////////////////////
+
   value: FieldValue | FieldValue[],
-  files?: FileList[];
+  files?: FileList;
   options?: HTMLOptionsCollection;
   nodes?: RadioNodeList;
   values?: IterableIterator<any>;
   checked?: boolean;
   defaultValue?: FieldValue | FieldValue[];
   defaultChecked?: boolean;
-  handler?: IFieldHandler;
-  config?: IFieldConfig<T>;
-  unregister?: () => void;
-  unbind?: () => void;
+
+
+  ///////////////////////////////////////////
+  // Validation
+  ///////////////////////////////////////////
+
+  // ValidityState Props, Not all elements
+  // support these in some cases, here more for 
+  // convenience. If doesn't exist doesn't really hurt.
+  validity?: ValidityState;
+  required?: boolean;
+  min?: string;
+  max?: string;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  step?: number; // not technically validation here for convenience.
+
 }
 
 // This is a bit convoluted as not each element
