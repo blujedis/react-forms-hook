@@ -44,6 +44,9 @@ const MyComponent = () => {
         {!state.errors.name ? null : <div style={error}>{state.errors.name.join('<br/>')}</div>}
       </div>
 
+      <button className="button button-primary" type="submit" style={{ marginRight: '.5rem' }}>Submit</button>
+      <button className="button button-outline" type="reset">Reset</button>
+
     </form>
 
   );
