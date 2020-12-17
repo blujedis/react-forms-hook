@@ -7,7 +7,7 @@ Storybook docs coming soon, for now here are the basics.
 ## Installation
 
 ```sh
-yarn add @blujedis/react-form-hooks
+yarn add @blujedis/react-forms-hook
 ```
 
 ## Usage
